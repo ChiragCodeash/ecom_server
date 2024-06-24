@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../../db/db");
-const path = require("path");
 const {
   CreateProductValidation,
   CreateVarientValidation,
@@ -10,14 +9,18 @@ const {
   DelteVariantValidation,
   UpdateVariantValidation,
   GetAllVariantValidation,
-  UploadImagesValidation,
+  CheckVariantValidation,
+  GetProductValidation,
+  GetVariantValidation,
 } = require("../validation/ProductValidation");
-const { validationResult } = require("express-validator");
+const { validationResult, body } = require("express-validator");
 const uploadImage = require("../../middleware/uploadImages");
 const deleteFile = require("../../utils/deleteFile");
 const expressValidationErrorHandler = require("../../middleware/expressValidationErrorHandler");
+const genratePublicUrl = require("../../utils/genratePublicUrl");
 const IMG_URL = `${process.env.URL}/images`;
 const PRODUCT_URL = `/images/product`;
+const RECORD_PER_PAGE = +process.env.RECORD_PER_PAGE;
 
 // Create A Product
 router.post("/createproduct", CreateProductValidation, async (req, res) => {
@@ -201,44 +204,46 @@ router.post(
       message: "success",
     };
     try {
-      req.body.map(async({price, sale_price, stock, variant_status, variant_id, sku_id} , i)=>{
+      req.body.map(
+        async (
+          { price, sale_price, stock, variant_status, variant_id, sku_id },
+          i
+        ) => {
+          let updateQuery = "UPDATE tblvariant  SET ";
+          const updateKeyArr = [];
+          const updateValueArr = [];
 
-        let updateQuery = "UPDATE tblvariant  SET ";
-        const updateKeyArr = [];
-        const updateValueArr = [];
-  
-        if (price) {
-          updateKeyArr.push(`price = ?`);
-          updateValueArr.push(price);
-        }
-        if (sale_price) {
-          updateKeyArr.push(`sale_price = ?`);
-          updateValueArr.push(sale_price);
-        }
-        if (typeof variant_status !== "undefined") {
-          updateKeyArr.push(`variant_status = ?`);
-          updateValueArr.push(variant_status);
-        }
-        if (stock) {
-          updateKeyArr.push(`stock = ?`);
-          updateValueArr.push(stock);
-        }
-        if (sku_id) {
-          updateKeyArr.push(`sku_id = ?`);
-          updateValueArr.push(sku_id);
-        }
-  
-        updateQuery += `${ updateKeyArr.join(",")
-        } WHERE variant_id = ?`;
-  
-        
-        const [result] = await db.query(updateQuery, [
-          ...updateValueArr,
-          variant_id,
-        ]);
-      })
+          if (price) {
+            updateKeyArr.push(`price = ?`);
+            updateValueArr.push(price);
+          }
+          if (sale_price) {
+            updateKeyArr.push(`sale_price = ?`);
+            updateValueArr.push(sale_price);
+          }
+          if (typeof variant_status !== "undefined") {
+            updateKeyArr.push(`variant_status = ?`);
+            updateValueArr.push(variant_status);
+          }
+          if (stock) {
+            updateKeyArr.push(`stock = ?`);
+            updateValueArr.push(stock);
+          }
+          if (sku_id) {
+            updateKeyArr.push(`sku_id = ?`);
+            updateValueArr.push(sku_id);
+          }
 
-      res.send({ ...response , message :'Changes saved' });
+          updateQuery += `${updateKeyArr.join(",")} WHERE variant_id = ?`;
+
+          const [result] = await db.query(updateQuery, [
+            ...updateValueArr,
+            variant_id,
+          ]);
+        }
+      );
+
+      res.send({ ...response, message: "Changes saved" });
     } catch (error) {
       console.log(error);
       res.status(400).json({
@@ -248,7 +253,6 @@ router.post(
     }
   }
 );
-
 
 // Delete Variant
 router.delete("/deletevariant", DelteVariantValidation, async (req, res) => {
@@ -304,160 +308,211 @@ router.delete("/deletevariant", DelteVariantValidation, async (req, res) => {
   }
 });
 
-// Get All Variant Product Wise
-router.post("/getallvarient", GetAllVariantValidation, async (req, res) => {
-  const status = false;
-  const { product_id, color_id } = req.body;
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        status: false,
-        message: errors.errors.map((error) => {
-          return error.msg;
-        })[0],
-      });
-    }
-    const [color] = await db.query(
-      "SELECT DISTINCT  c.color_id , c.color_name from tblvariant v JOIN tblcolor c ON c.color_id = v.color_id WHERE v.product_id = ? ORDER BY v.created_date;",
-      [product_id]
-    );
-
-    if (color_id || color.length) {
-      var [variants] = await db.query(
-        "SELECT v.* , s.size_name FROM tblvariant v  JOIN tblsize s ON s.size_id = v.size_id WHERE v.color_id = ? AND v.product_id = ? ORDER BY v.created_date;",
-        [color_id || color[0].color_id, product_id]
-      );
-    } else {
-      var variants = [];
-    }
-
-    if (color_id || color.length) {
-      var [images] = await db.query(
-        "SELECT * from tblimages WHERE product_id = ? AND color_id = ?;",
-        [product_id, color_id || color[0].color_id]
-      );
-      if (images) {
-        images = images[0];
-        if (images) {
-          const img_arr = JSON.parse(images.image_array);
-          images["image_array"] = img_arr.map((element, i) => {
-            return `${IMG_URL}/product/${element}`;
-          });
-        } else {
-          var images = [];
-        }
-      }
-    } else {
-      var images = [];
-    }
-
-    const data = {
-      color,
-      variants,
-      images,
-    };
-    res.status(200).json({ status: true, message: "Success", data });
-  } catch (error) {
-    console.log("🚀 ~ router.get ~ error:", error);
-    res.status(400).json({
-      status,
-      message: "server error",
-    });
-  }
-});
-
+// Check variant
 router.post(
-  "/uploadimages",
-  uploadImage({
-    destination: `public/images/product`,
-    filenamePrefix: "image",
-    fieldName: "images",
-    maxSize: 1024 * 1024 * 2,
-  }),
-  UploadImagesValidation,
+  "/checkvariant",
+  CheckVariantValidation,
+  expressValidationErrorHandler,
   async (req, res) => {
-    const status = false;
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        if (req.files) {
-          deleteFile(
-            req.files.map((name) => name.filename),
-            "public/images/product"
-          );
-        }
-        return res.status(400).json({
-          status: false,
-          message: errors.errors.map((error) => {
-            return error.msg;
-          })[0],
-        });
-      }
-      const { product_id, color_id } = req.body;
-      const [is_added] = await db.query(
-        "SELECT * FROM tblimages WHERE product_id = ? AND color_id = ?",
-        [product_id, color_id]
+      let response = {
+        status: true,
+        message: "success",
+      };
+      const { product_id } = req.body;
+
+      const [checkIsNullVariant] = await db.query(
+        "SELECT color_id , variant_id FROM tblvariant WHERE (sku_id IS NULL OR price IS NULL OR sale_price IS NULL OR stock IS NULL OR image_id IS NULL) AND product_id = ?",
+        [product_id]
       );
-      var response;
-      if (is_added.length) {
-        const old_img = JSON.parse(is_added[0].image_array);
-        const image_id = is_added[0].image_id;
-        const img_arr = [
-          ...old_img,
-          ...req.files.map((img_name) => img_name.filename),
-        ];
-        var [data] = await db.query(
-          "UPDATE `tblimages` SET `product_id`=?,`color_id`=?,`image_array`=? WHERE image_id = ?",
-          [product_id, color_id, JSON.stringify(img_arr), image_id]
+      if (!checkIsNullVariant.length) {
+        db.query(
+          "UPDATE tblproduct SET draft= 0 , status = 1 WHERE product_id = ?",
+          [product_id]
         );
+        db.query(
+          "UPDATE tblvariant SET variant_status = 1 WHERE product_id = ?",
+          [product_id]
+        );
+
         response = {
-          ...is_added[0],
-          image_array: img_arr,
+          ...response,
+          message: "Your product live as soon as possible",
         };
       } else {
-        var img_arr = req.files.map((img_name) => img_name.filename);
-        var [data] = await db.query(
-          "INSERT INTO `tblimages`(`product_id`, `color_id`, `image_array`) VALUES (?,?,?)",
-          [product_id, color_id, JSON.stringify(img_arr)]
-        );
         response = {
-          image_id: data.insertId,
-          image_array: img_arr,
-          product_id: Number(product_id),
-          color_id: Number(color_id),
-        };
-      }
-
-      response.image_array = response.image_array.map((element, i) => {
-        return `${IMG_URL}/product/${element}`;
-      });
-
-      if (data.affectedRows) {
-        res.status(200).json({
-          status: true,
-          message: "Image uploaded",
-          data: response,
-        });
-      } else {
-        res.status(200).json({
           status: false,
-          message: "Unable to add images",
-        });
+          message: "Please complate this variant first",
+          data: {
+            color_id: checkIsNullVariant[0].color_id,
+          },
+        };
       }
+
+      res.status(200).json(response);
     } catch (error) {
       console.log("🚀 ~ router.get ~ error:", error);
-      if (req.files) {
-        deleteFile(
-          req.files.map((name) => name.filename),
-          "public/images/product"
-        );
-      }
       res.status(400).json({
-        status,
+        status: false,
         message: "server error",
       });
     }
   }
 );
+
+// Get all product
+router.post(
+  "/getproduct",
+  GetProductValidation,
+  expressValidationErrorHandler,
+  async (req, res) => {
+    try {
+      const { query, page, status, category } = req.body;
+      let totalPage;
+      let response = {
+        status: true,
+        message: "Success",
+      };
+      const keyArr = [];
+      const valueArr = [];
+      let sql =
+        "SELECT p.* , pc.category_name , im.image_array FROM tblproduct p";
+
+      sql += ` JOIN tblproductcategory pc ON pc.pc_id = p.pc_id LEFT JOIN tblimages im ON im.product_id = p.product_id  `;
+
+      if (category) {
+        keyArr.push(" p.pc_id = ? ");
+        valueArr.push(category);
+      }
+      if (status || status === 0) {
+        if (status === 1 || status === 0) {
+          keyArr.push(" p.status = ? ");
+          valueArr.push(status);
+        } else {
+          keyArr.push(" p.draft = ? ");
+          valueArr.push(1);
+        }
+      }
+      if (query) {
+        keyArr.push(
+          `  ( p.product_title LIKE '%${query.trim()}%' OR p.product_desc LIKE '%${query.trim()}%' ) `
+        );
+        // valueArr.push(category)
+      }
+
+      if (keyArr.length) {
+        sql += ` WHERE ${keyArr.join(" AND ")}`;
+      }
+
+      // sql += ` JOIN tblproductcategory pc ON pc.pc_id = p.pc_id  JOIN tblvariant v ON v.product_id = p.product_id JOIN tblimages im ON im.product_id = v.product_id  `
+
+      const [data] = await db.query(sql, valueArr);
+      const offset = (page - 1) * RECORD_PER_PAGE;
+      sql += `  ORDER BY p.created_date DESC LIMIT ${RECORD_PER_PAGE} OFFSET ${offset}`;
+
+      totalPage = Math.ceil(data.length / RECORD_PER_PAGE);
+
+      let [rows, fields] = await db.execute(sql, valueArr);
+
+      rows = rows.map((item, i) => {
+        return {
+          ...item,
+          image_array: genratePublicUrl(
+            PRODUCT_URL,
+            item.image_array
+              ? JSON.parse(item.image_array)[0]
+              : "default_product.png"
+          ),
+        };
+      });
+      res.send({
+        ...response,
+        result: {
+          data: rows,
+          perPage: RECORD_PER_PAGE,
+          totalPage,
+        },
+      });
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({
+        status: false,
+        message: "Server error",
+      });
+    }
+  }
+);
+
+router.post(
+  "/getvariant",
+  GetVariantValidation,
+  expressValidationErrorHandler,
+  async (req, res) => {
+    try {
+      const { product_id , condition } = req.body
+      const keyArr = [];
+      const valueArr = [product_id];
+      let sql = "SELECT v.* , im.image_array , c.color_name , s.size_name FROM tblvariant v "
+
+      sql += ` LEFT JOIN tblimages im ON im.product_id = v.product_id  `;
+      sql += ` LEFT JOIN tblcolor c ON c.color_id = v.color_id  `;
+      sql += ` LEFT JOIN tblsize s ON s.size_id = v.size_id  `;
+      sql += ` WHERE v.product_id = ?  `;
+      switch (condition) {
+        case "ACTIVE":
+          keyArr.push(" v.variant_status = ? ")
+          valueArr.push(1)
+          break;
+        case "DEACTIVE":
+          keyArr.push(" v.variant_status = ? ")
+          valueArr.push(0)
+          break;
+        case "OUT_OF_STOCK":
+          keyArr.push(" v.stock = ? ")
+          valueArr.push(0)
+          break;
+        case "LOW_STOCK":
+          keyArr.push(" v.stock < ? ")
+          valueArr.push(10)
+          break;
+      
+        default:
+          break;
+      }
+
+      if (keyArr.length) {
+        sql += ` AND ${keyArr.join(" AND ")}`;
+      }
+
+      let [rows] = await db.query(sql, valueArr);
+
+      rows = rows.map((item, i) => {
+        return {
+          ...item,
+          image_array: genratePublicUrl(
+            PRODUCT_URL,
+            item.image_array
+              ? JSON.parse(item.image_array)[0]
+              : "default_product.png"
+          ),
+        };
+      });
+      let response = {
+        status: true,
+        message: "Success",
+       data: rows
+      };
+      res.send({
+        ...response,
+      });
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({
+        status: false,
+        message: "Server error",
+      });
+    }
+  }
+);
+
 module.exports = router;

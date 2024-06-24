@@ -29,6 +29,7 @@ router.post(
   async (req, res) => {
     const status = false;
     try {
+      let image_id;
       const { product_id, color_id } = req.body;
       const files = req.files;
       const [is_added] = await db.query(
@@ -38,7 +39,7 @@ router.post(
       var response;
       if (is_added.length) {
         const img_arr = saveFile(PRODUCT_URL, files);
-        var image_id = is_added[0].image_id;
+        image_id = is_added[0].image_id;
         var old_image = JSON.parse(is_added[0].image_array);
         var [data] = await db.query(
           "UPDATE `tblimages` SET `product_id`=?,`color_id`=?,`image_array`=? WHERE image_id = ?",
@@ -60,6 +61,7 @@ router.post(
           "INSERT INTO `tblimages`(`product_id`, `color_id`, `image_array`) VALUES (?,?,?)",
           [product_id, color_id, JSON.stringify(img_arr)]
         );
+        image_id = data.insertId;
         response = {
           image_id: data.insertId,
           image_array: img_arr,
@@ -67,6 +69,11 @@ router.post(
           color_id: +color_id,
         };
       }
+
+      await db.query(
+        "UPDATE tblvariant SET image_id = ? WHERE color_id = ? AND product_id = ?",
+        [image_id, color_id, product_id]
+      );
 
       response.image_array = response.image_array.map((element, i) => {
         return genratePublicUrl(`${PRODUCT_URL}`, element);
@@ -166,9 +173,9 @@ router.post(
         res.status(200).json({
           status: true,
           message: "Image Update success",
-          data : {
-            filename  : genratePublicUrl(PRODUCT_URL, new_img)
-          }
+          data: {
+            filename: genratePublicUrl(PRODUCT_URL, new_img),
+          },
         });
       } else {
         res.status(400).json({
