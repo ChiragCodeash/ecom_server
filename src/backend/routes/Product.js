@@ -12,12 +12,14 @@ const {
   CheckVariantValidation,
   GetProductValidation,
   GetVariantValidation,
+  DelteProductValidation,
 } = require("../validation/ProductValidation");
 const { validationResult, body } = require("express-validator");
 const uploadImage = require("../../middleware/uploadImages");
 const deleteFile = require("../../utils/deleteFile");
 const expressValidationErrorHandler = require("../../middleware/expressValidationErrorHandler");
 const genratePublicUrl = require("../../utils/genratePublicUrl");
+
 const IMG_URL = `${process.env.URL}/images`;
 const PRODUCT_URL = `/images/product`;
 const RECORD_PER_PAGE = +process.env.RECORD_PER_PAGE;
@@ -63,21 +65,12 @@ router.post("/createproduct", CreateProductValidation, async (req, res) => {
 });
 
 // Create product varient
-router.post("/createvarient", CreateVarientValidation, async (req, res) => {
+router.post("/createvarient", CreateVarientValidation,expressValidationErrorHandler, async (req, res) => {
   let status = false;
   const { product_id, color_id, size_id } = req.body;
 
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        status: false,
-        message: errors.errors.map((error) => {
-          return error.msg;
-        })[0],
-      });
-    }
-
+   
     // const varientArray = varient.map((varient, i) => {
     //   return [product_id, ...varient];
     // });
@@ -88,10 +81,21 @@ router.post("/createvarient", CreateVarientValidation, async (req, res) => {
       [product_id, size_id, color_id]
     );
     if (!isExits.length) {
-      const [data] = await db.query(
-        "INSERT INTO `tblvariant`( `product_id` ,`size_id`,`color_id`) VALUES (? , ? , ?)",
-        [product_id, size_id, color_id]
-      );
+      const [[image_data]] = await db.query("SELECT image_id FROM tblimages WHERE product_id = ? AND color_id = ? " , [product_id, color_id])
+      // console.log(data1)
+      // return
+      if(image_data){
+        var [data] = await db.query(
+          "INSERT INTO `tblvariant`( `product_id` ,`size_id`,`color_id` , `image_id`) VALUES (? , ? , ? , ?)",
+          [product_id, size_id, color_id , image_data.image_id]
+        );
+      }else{
+         [data] = await db.query(
+          "INSERT INTO `tblvariant`( `product_id` ,`size_id`,`color_id` ) VALUES (? , ? , ? )",
+          [product_id, size_id, color_id ]
+        );
+
+      }
       res.status(200).json({
         status: true,
         message: "Success",
@@ -114,44 +118,83 @@ router.post("/createvarient", CreateVarientValidation, async (req, res) => {
 });
 
 // Update Product
-router.post("/updateproduct", UpdateProductValidation, async (req, res) => {
-  let status = false;
-  const { product_title, pack_of, ideal_for, product_desc, pc_id, product_id } =
-    req.body;
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        status: false,
-        message: errors.errors.map((error) => {
-          return error.msg;
-        })[0],
-      });
-    }
-    const [data] = await db.query(
-      "UPDATE `tblproduct` SET `product_title`=?,`pack_of`=?,`ideal_for`=?,`product_desc`=?,`pc_id`=? WHERE product_id= ?",
-      [product_title, pack_of, ideal_for, product_desc, pc_id, product_id]
-    );
-    if (data.affectedRows) {
-      // console.log("🚀 ~ router.post ~ data:", data);
-      res.status(200).send({
-        status: true,
-        message: "Change Saved",
-      });
-    } else {
-      res.status(400).send({
-        status,
-        message: "Something went wrong",
-      });
-    }
-  } catch (error) {
-    console.log(error);
-    res.status(400).send({
+router.post(
+  "/updateproduct",
+  UpdateProductValidation,
+  expressValidationErrorHandler,
+  async (req, res) => {
+    // let status = false;
+    const {
+      product_title,
+      pack_of,
+      ideal_for,
+      product_desc,
+      pc_id,
+      product_id,
       status,
-      message: "Server Error",
-    });
+    } = req.body;
+    try {
+      let updateQuery = "UPDATE tblproduct  SET ";
+      const updateKeyArr = [];
+      const updateValueArr = [];
+
+      if (product_title) {
+        updateKeyArr.push(`product_title = ?`);
+        updateValueArr.push(product_title);
+      }
+      if (pack_of) {
+        updateKeyArr.push(`pack_of = ?`);
+        updateValueArr.push(pack_of);
+      }
+      if (pack_of) {
+        updateKeyArr.push(`ideal_for = ?`);
+        updateValueArr.push(ideal_for);
+      }
+      if (product_desc) {
+        updateKeyArr.push(`product_desc = ?`);
+        updateValueArr.push(product_desc);
+      }
+      if (pc_id) {
+        updateKeyArr.push(`pc_id = ?`);
+        updateValueArr.push(pc_id);
+      }
+      if (status) {
+        updateKeyArr.push(`status = ?`);
+        updateValueArr.push(status);
+      }
+
+      updateQuery += `${updateKeyArr.join(",")} WHERE product_id = ?`;
+
+      const [data] = await db.query(updateQuery, [
+        ...updateValueArr,
+        product_id,
+      ]);
+
+      // const [data] = await db.query(
+      //   "UPDATE `tblproduct` SET `product_title`=?,`pack_of`=?,`ideal_for`=?,`product_desc`=?,`pc_id`=? WHERE product_id= ?",
+      //   [product_title, pack_of, ideal_for, product_desc, pc_id, product_id]
+      // );
+      if (data.affectedRows) {
+        // console.log("🚀 ~ router.post ~ data:", data);
+        res.status(200).send({
+          status: true,
+          message: "Change Saved",
+        });
+      } else {
+        res.status(400).send({
+          status: false,
+          message: "Something went wrong",
+        });
+      }
+    } catch (error) {
+      console.log(error);
+      res.status(400).send({
+        status: false,
+        message: "Server Error",
+      });
+    }
   }
-});
+);
 
 router.get("/getsingalproduct", SingalProductValidation, async (req, res) => {
   let status = false;
@@ -188,6 +231,69 @@ router.get("/getsingalproduct", SingalProductValidation, async (req, res) => {
     res.status(400).json({
       status,
       message: "Server error",
+    });
+  }
+});
+
+// Get All Variant Product Wise
+router.post("/getallvarient", GetAllVariantValidation, async (req, res) => {
+  const status = false;
+  const { product_id, color_id } = req.body;
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        status: false,
+        message: errors.errors.map((error) => {
+          return error.msg;
+        })[0],
+      });
+    }
+    const [color] = await db.query(
+      "SELECT DISTINCT  c.color_id , c.color_name from tblvariant v JOIN tblcolor c ON c.color_id = v.color_id WHERE v.product_id = ? ORDER BY v.created_date;",
+      [product_id]
+    );
+
+    if (color_id || color.length) {
+      var [variants] = await db.query(
+        "SELECT v.* , s.size_name FROM tblvariant v  JOIN tblsize s ON s.size_id = v.size_id WHERE v.color_id = ? AND v.product_id = ? ORDER BY v.created_date;",
+        [color_id || color[0].color_id, product_id]
+      );
+    } else {
+      var variants = [];
+    }
+
+    if (color_id || color.length) {
+      var [images] = await db.query(
+        "SELECT * from tblimages WHERE product_id = ? AND color_id = ?;",
+        [product_id, color_id || color[0].color_id]
+      );
+      if (images) {
+        images = images[0];
+        if (images) {
+          const img_arr = JSON.parse(images.image_array);
+          images["image_array"] = img_arr.map((element, i) => {
+            return `${IMG_URL}/product/${element}`;
+          });
+        } else {
+          var images = [];
+        }
+      }
+    } else {
+      var images = [];
+    }
+
+    const data = {
+      color,
+      variants,
+      images,
+    };
+    res.status(200).json({ status: true, message: "Success", data });
+  } catch (error) {
+    console.log("🚀 ~ router.get ~ error:", error);
+    res.status(400).json({
+      status,
+      message: "server error",
     });
   }
 });
@@ -368,6 +474,7 @@ router.post(
   async (req, res) => {
     try {
       const { query, page, status, category } = req.body;
+      console.log(query)
       let totalPage;
       let response = {
         status: true,
@@ -378,7 +485,7 @@ router.post(
       let sql =
         "SELECT p.* , pc.category_name , im.image_array FROM tblproduct p";
 
-      sql += ` JOIN tblproductcategory pc ON pc.pc_id = p.pc_id LEFT JOIN tblimages im ON im.product_id = p.product_id  `;
+      sql += ` JOIN tblproductcategory pc ON pc.pc_id = p.pc_id LEFT JOIN tblimages im ON im.product_id = p.product_id LEFT JOIN tblvariant v ON p.product_id = v.product_id`;
 
       if (category) {
         keyArr.push(" p.pc_id = ? ");
@@ -395,8 +502,11 @@ router.post(
       }
       if (query) {
         keyArr.push(
-          `  ( p.product_title LIKE '%${query.trim()}%' OR p.product_desc LIKE '%${query.trim()}%' ) `
+          `  ( p.product_title LIKE '%${query.trim()}%' OR p.product_desc LIKE '%${query.trim()}%' OR v.sku_id LIKE '%${query.trim()}%' ) `
         );
+        // keyArr.push(
+        //   `  ( v.sku_id LIKE '%${query.trim()}%' ) `
+        // );
         // valueArr.push(category)
       }
 
@@ -406,9 +516,12 @@ router.post(
 
       // sql += ` JOIN tblproductcategory pc ON pc.pc_id = p.pc_id  JOIN tblvariant v ON v.product_id = p.product_id JOIN tblimages im ON im.product_id = v.product_id  `
 
+      sql += ` GROUP BY p.product_id `;
       const [data] = await db.query(sql, valueArr);
       const offset = (page - 1) * RECORD_PER_PAGE;
-      sql += `  ORDER BY p.created_date DESC LIMIT ${RECORD_PER_PAGE} OFFSET ${offset}`;
+      sql += `  ORDER BY p.created_date DESC  LIMIT ${RECORD_PER_PAGE} OFFSET ${offset}`;
+
+      // console.log(sql)
 
       totalPage = Math.ceil(data.length / RECORD_PER_PAGE);
 
@@ -443,39 +556,41 @@ router.post(
   }
 );
 
+// get all Variants
 router.post(
   "/getvariant",
   GetVariantValidation,
   expressValidationErrorHandler,
   async (req, res) => {
     try {
-      const { product_id , condition } = req.body
+      const { product_id, condition } = req.body;
       const keyArr = [];
       const valueArr = [product_id];
-      let sql = "SELECT v.* , im.image_array , c.color_name , s.size_name FROM tblvariant v "
+      let sql =
+        "SELECT v.* , im.image_array , c.color_name , s.size_name FROM tblvariant v ";
 
-      sql += ` LEFT JOIN tblimages im ON im.product_id = v.product_id  `;
+      sql += ` LEFT JOIN tblimages im ON im.image_id = v.image_id  `;
       sql += ` LEFT JOIN tblcolor c ON c.color_id = v.color_id  `;
       sql += ` LEFT JOIN tblsize s ON s.size_id = v.size_id  `;
       sql += ` WHERE v.product_id = ?  `;
       switch (condition) {
         case "ACTIVE":
-          keyArr.push(" v.variant_status = ? ")
-          valueArr.push(1)
+          keyArr.push(" v.variant_status = ? ");
+          valueArr.push(1);
           break;
         case "DEACTIVE":
-          keyArr.push(" v.variant_status = ? ")
-          valueArr.push(0)
+          keyArr.push(" v.variant_status = ? ");
+          valueArr.push(0);
           break;
         case "OUT_OF_STOCK":
-          keyArr.push(" v.stock = ? ")
-          valueArr.push(0)
+          keyArr.push(" v.stock = ? ");
+          valueArr.push(0);
           break;
         case "LOW_STOCK":
-          keyArr.push(" v.stock < ? ")
-          valueArr.push(10)
+          keyArr.push(" v.stock < ? ");
+          valueArr.push(10);
           break;
-      
+
         default:
           break;
       }
@@ -483,6 +598,7 @@ router.post(
       if (keyArr.length) {
         sql += ` AND ${keyArr.join(" AND ")}`;
       }
+      sql += ` ORDER BY c.color_id`;
 
       let [rows] = await db.query(sql, valueArr);
 
@@ -500,11 +616,57 @@ router.post(
       let response = {
         status: true,
         message: "Success",
-       data: rows
+        data: rows,
       };
       res.send({
         ...response,
       });
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({
+        status: false,
+        message: "Server error",
+      });
+    }
+  }
+);
+
+router.delete(
+  "/deleteproduct",
+  DelteProductValidation,
+  expressValidationErrorHandler,
+  async (req, res) => {
+    try {
+      const { product_id } = req.body;
+
+      const [image_data] = await db.query(
+        "SELECT * FROM tblimages  WHERE product_id = ?",
+        [product_id]
+      );
+      const [data] = await db.query(
+        "DELETE FROM tblproduct WHERE product_id = ?",
+        [product_id]
+      );
+
+      if (data.affectedRows) {
+        if (image_data.length) {
+          let img_arr = [];
+          image_data.map((item, i) => {
+            img_arr = [...img_arr, ...JSON.parse(item.image_array)];
+            return;
+          });
+          deleteFile(PRODUCT_URL, img_arr);
+        }
+        res.status(200).json({
+          status: true,
+          message: "Product deleted...",
+        });
+      } else {
+        res.status(200).json({
+          status: false,
+          message: "Something went wrong",
+        });
+      }
     } catch (error) {
       console.log(error);
       res.status(400).json({

@@ -78,23 +78,41 @@ const UpdateProductValidation = [
         throw new Error(`'${value}' is invalid product ID`);
       }
     }),
-  body("pc_id", "pc_id is required").notEmpty(),
-  body("product_title", "product_title is required").notEmpty(),
-  body("product_title", "product title can not containe only number").matches(
-    /[^0-9]/
-  ),
-  body("product_desc", "product_desc is required").notEmpty(),
-  body("pack_of", "Number of Pack is required").notEmpty(),
-  body("pack_of", "Pack of only containe number").isNumeric(),
-  body("ideal_for", "Ideal for is required").notEmpty(),
-  body("ideal_for").custom((value, { req }) => {
-    if (!ideal_for.includes(value)) {
-      throw new Error(
-        "Invalid Ideal for. Please use 'male','female' or 'kids'"
+  body("pc_id", "pc_id is required")
+    .optional()
+    .notEmpty()
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `tblproductcategory` where pc_id = ?",
+        [value]
       );
-    }
-    return true;
-  }),
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid pc_id`);
+      }
+    }),
+  body("product_title")
+    .optional()
+    .notEmpty()
+    .withMessage("product_title is required")
+    .matches(/[^0-9]/)
+    .withMessage("product title can not containe only number"),
+  body("product_desc")
+    .optional()
+    .notEmpty()
+    .withMessage("product_desc is required"),
+  body("pack_of")
+    .optional()
+    .notEmpty()
+    .withMessage("Number of Pack is required")
+    .isNumeric()
+    .withMessage("Pack of only containe number"),
+  body("ideal_for")
+    .optional()
+    .notEmpty()
+    .withMessage("Ideal for is required")
+    .isIn(["male", "female", "kids"])
+    .withMessage("Invalid Ideal for. Please use 'male','female' or 'kids'"),
+  body("status").optional().isBoolean().withMessage("Status must be 0 or 1"),
 ];
 
 const SingalProductValidation = [
@@ -110,7 +128,35 @@ const DelteVariantValidation = [
     .notEmpty()
     .withMessage("Variant ID is required")
     .isNumeric()
-    .withMessage("Variant ID must be in number"),
+    .withMessage("Variant ID must be in number")
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `tblvariant` where variant_id  = ?",
+        [value]
+      );
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid variant ID`);
+      }
+      return true;
+    }),
+];
+
+const DelteProductValidation = [
+  body("product_id")
+    .notEmpty()
+    .withMessage("Product ID is required")
+    .isNumeric()
+    .withMessage("Product ID must be in number")
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `tblproduct` where product_id  = ?",
+        [value]
+      );
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid product ID`);
+      }
+      return true;
+    }),
 ];
 const GetAllVariantValidation = [
   body("product_id")
@@ -126,6 +172,7 @@ const GetAllVariantValidation = [
       if (!isExits.length) {
         throw new Error(`'${value}' is invalid product ID`);
       }
+      return true;
     }),
 
   body("color_id")
@@ -184,7 +231,8 @@ const UpdateVariantValidation = [
     .withMessage("Price is required")
     .isNumeric()
     .withMessage("Price must be a number")
-    .customSanitizer((value) => Number(value).toFixed(3)),
+    .customSanitizer((value) => Number(value).toFixed(3))
+    .toFloat(),
   body("*.sale_price")
     .optional()
     .notEmpty()
@@ -192,8 +240,11 @@ const UpdateVariantValidation = [
     .isNumeric()
     .withMessage("Sale price must be a number")
     .customSanitizer((value) => Number(value).toFixed(3))
+    .toFloat()
     .custom((value, { req, path }) => {
       path = JSON.parse(path.split(".")[0]);
+      // console.log("Sale_price==>" , value)
+      // console.log("price==>" , req.body[path].price)
       if (value >= req.body[path].price) {
         throw new Error("Sale price is must be less then actual price");
       }
@@ -203,9 +254,8 @@ const UpdateVariantValidation = [
     .optional()
     .notEmpty()
     .withMessage("Stock is required")
-    .isNumeric()
-    .withMessage("Stock must be a number")
-    .toInt(),
+    .isInt({ min: 0, max: 1000 })
+    .withMessage("Stock must be a number , between 1 to 1000"),
   body("*.variant_status")
     .optional()
     .notEmpty()
@@ -310,7 +360,7 @@ const GetProductValidation = [
     .notEmpty()
     .withMessage("query is  required")
     .isString()
-    .withMessage("query must be in string"),
+    .withMessage("query must be in string").trim(),
 ];
 
 const GetVariantValidation = [
@@ -347,4 +397,5 @@ module.exports = {
   CheckVariantValidation,
   GetProductValidation,
   GetVariantValidation,
+  DelteProductValidation,
 };
