@@ -17,23 +17,66 @@ const required_list = [
 ];
 
 const CreateProductValidation = [
-  body("pc_id", "pc_id is required").notEmpty(),
-  body("product_title", "product_title is required").notEmpty(),
-  body("product_title", "product title can not containe only number").matches(
-    /[^0-9]/
-  ),
-  body("product_desc", "product_desc is required").notEmpty(),
-  body("pack_of", "Number of Pack is required").notEmpty(),
-  // body("pack_of", "Pack of only containe number").isNumeric(),
-  body("ideal_for", "Ideal for is required").notEmpty(),
-  body("ideal_for").custom((value, { req }) => {
-    if (!ideal_for.includes(value)) {
-      throw new Error(
-        "Invalid Ideal for. Please use 'male','female' or 'kids'"
+  body("pc_id", "pc_id is required")
+    .notEmpty()
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `tblproductcategory` where pc_id = ?",
+        [value]
       );
-    }
-    return true;
-  }),
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid pc_id`);
+      }
+    }),
+  body("product_title")
+    .notEmpty()
+    .withMessage("product_title is required")
+    .notEmpty()
+    .matches(/[^0-9]/)
+    .withMessage("product title can not containe only number"),
+  body("product_desc", "product_desc is required").notEmpty(),
+  body("fabric")
+    .notEmpty()
+    .withMessage("Fabric is required")
+    .isNumeric()
+    .withMessage("Fabric must be in number")
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `attributes` where id = ? AND type = 'fabric' ",
+        [value]
+      );
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid id in fabric`);
+      }
+    }),
+  body("style")
+    .notEmpty()
+    .withMessage("Style is required")
+    .isNumeric()
+    .withMessage("Style must be in number")
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `attributes` where id = ? AND type = 'style' ",
+        [value]
+      );
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid id in style`);
+      }
+    }),
+  body("occasion")
+    .notEmpty()
+    .withMessage("Occasion is required")
+    .isNumeric()
+    .withMessage("Occasion must be in number")
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `attributes` where id = ? AND type = 'occasion' ",
+        [value]
+      );
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid id in occasion`);
+      }
+    }),
 ];
 
 const CreateVarientValidation = [
@@ -100,18 +143,48 @@ const UpdateProductValidation = [
     .optional()
     .notEmpty()
     .withMessage("product_desc is required"),
-  body("pack_of")
-    .optional()
+  body("fabric")
     .notEmpty()
-    .withMessage("Number of Pack is required")
+    .withMessage("Fabric is required")
     .isNumeric()
-    .withMessage("Pack of only containe number"),
-  body("ideal_for")
-    .optional()
+    .withMessage("Fabric must be in number")
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `attributes` where id = ? AND type = 'fabric' ",
+        [value]
+      );
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid id in fabric`);
+      }
+    }),
+  body("style")
     .notEmpty()
-    .withMessage("Ideal for is required")
-    .isIn(["male", "female", "kids"])
-    .withMessage("Invalid Ideal for. Please use 'male','female' or 'kids'"),
+    .withMessage("Style is required")
+    .isNumeric()
+    .withMessage("Style must be in number")
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `attributes` where id = ? AND type = 'style' ",
+        [value]
+      );
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid id in style`);
+      }
+    }),
+  body("occasion")
+    .notEmpty()
+    .withMessage("Occasion is required")
+    .isNumeric()
+    .withMessage("Occasion must be in number")
+    .custom(async (value) => {
+      const [isExits] = await db.query(
+        "SELECT * FROM `attributes` where id = ? AND type = 'occasion' ",
+        [value]
+      );
+      if (!isExits.length) {
+        throw new Error(`'${value}' is invalid id in occasion`);
+      }
+    }),
   body("status").optional().isBoolean().withMessage("Status must be 0 or 1"),
 ];
 
@@ -360,7 +433,8 @@ const GetProductValidation = [
     .notEmpty()
     .withMessage("query is  required")
     .isString()
-    .withMessage("query must be in string").trim(),
+    .withMessage("query must be in string")
+    .trim(),
 ];
 
 const GetVariantValidation = [

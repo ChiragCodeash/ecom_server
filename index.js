@@ -34,13 +34,14 @@ app.use(jsonErrorHandler);
 app.use(commonFunction)
 
 // Frontend -------------------------------------------------------------------
-app.use("/theme", require("./src/frontend/routes/theme"));
+app.use("/api/theme", require("./src/frontend/routes/theme"));
 
 // Backend -------------------------------------------------------------------
 app.use("/auth", require("./src/backend/routes/auth"));
 app.use("/category", require("./src/backend/routes/ProductCategory"));
 app.use("/product", fetchUser, require("./src/backend/routes/Product"));
-app.use("/colorandsize", require("./src/backend/routes/ColorAndSize"));
+// app.use("/colorandsize", require("./src/backend/routes/ColorAndSize"));
+app.use("/attributes", require("./src/backend/routes/Attributes"));
 app.use("/image", require("./src/backend/routes/handleImage"));
 // app.use("/size", require("./src/backend/routes/Size"))
 

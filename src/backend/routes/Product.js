@@ -27,7 +27,8 @@ const RECORD_PER_PAGE = +process.env.RECORD_PER_PAGE;
 // Create A Product
 router.post("/createproduct", CreateProductValidation, async (req, res) => {
   let status = false;
-  const { pc_id, product_title, product_desc, pack_of, ideal_for } = req.body;
+  const { pc_id, product_title, product_desc, fabric, style, occasion } =
+    req.body;
 
   try {
     const errors = validationResult(req);
@@ -40,8 +41,8 @@ router.post("/createproduct", CreateProductValidation, async (req, res) => {
       });
     }
     const [data] = await db.query(
-      "INSERT INTO `tblproduct`( `pc_id` ,`product_title`,`product_desc` ,`pack_of` , `ideal_for`) VALUES (?,?,?,?,?)",
-      [pc_id, product_title, product_desc, pack_of, ideal_for]
+      "INSERT INTO `tblproduct`( `pc_id` ,`product_title`,`product_desc` ,`fabric` , `style` , `occasion`) VALUES (?,?,?,?,?,?)",
+      [pc_id, product_title, product_desc, fabric, style, occasion]
     );
     if (data.affectedRows) {
       res.status(200).json({
@@ -65,57 +66,63 @@ router.post("/createproduct", CreateProductValidation, async (req, res) => {
 });
 
 // Create product varient
-router.post("/createvarient", CreateVarientValidation,expressValidationErrorHandler, async (req, res) => {
-  let status = false;
-  const { product_id, color_id, size_id } = req.body;
+router.post(
+  "/createvarient",
+  CreateVarientValidation,
+  expressValidationErrorHandler,
+  async (req, res) => {
+    let status = false;
+    const { product_id, color_id, size_id } = req.body;
 
-  try {
-   
-    // const varientArray = varient.map((varient, i) => {
-    //   return [product_id, ...varient];
-    // });
-    // console.log(varientArray)
+    try {
+      // const varientArray = varient.map((varient, i) => {
+      //   return [product_id, ...varient];
+      // });
+      // console.log(varientArray)
 
-    const [isExits] = await db.query(
-      "SELECT * FROM tblvariant WHERE product_id =? AND size_id=? AND color_id=?",
-      [product_id, size_id, color_id]
-    );
-    if (!isExits.length) {
-      const [[image_data]] = await db.query("SELECT image_id FROM tblimages WHERE product_id = ? AND color_id = ? " , [product_id, color_id])
-      // console.log(data1)
-      // return
-      if(image_data){
-        var [data] = await db.query(
-          "INSERT INTO `tblvariant`( `product_id` ,`size_id`,`color_id` , `image_id`) VALUES (? , ? , ? , ?)",
-          [product_id, size_id, color_id , image_data.image_id]
+      const [isExits] = await db.query(
+        "SELECT * FROM tblvariant WHERE product_id =? AND size_id=? AND color_id=?",
+        [product_id, size_id, color_id]
+      );
+      if (!isExits.length) {
+        const [[image_data]] = await db.query(
+          "SELECT image_id FROM tblimages WHERE product_id = ? AND color_id = ? ",
+          [product_id, color_id]
         );
-      }else{
-         [data] = await db.query(
-          "INSERT INTO `tblvariant`( `product_id` ,`size_id`,`color_id` ) VALUES (? , ? , ? )",
-          [product_id, size_id, color_id ]
-        );
-
+        // console.log(data1)
+        // return
+        if (image_data) {
+          var [data] = await db.query(
+            "INSERT INTO `tblvariant`( `product_id` ,`size_id`,`color_id` , `image_id`) VALUES (? , ? , ? , ?)",
+            [product_id, size_id, color_id, image_data.image_id]
+          );
+        } else {
+          [data] = await db.query(
+            "INSERT INTO `tblvariant`( `product_id` ,`size_id`,`color_id` ) VALUES (? , ? , ? )",
+            [product_id, size_id, color_id]
+          );
+        }
+        res.status(200).json({
+          status: true,
+          message: "Success",
+          variant_id: data.insertId,
+        });
+      } else {
+        res.status(400).json({
+          status,
+          message: "This variant is already exits",
+        });
       }
-      res.status(200).json({
-        status: true,
-        message: "Success",
-        variant_id: data.insertId,
-      });
-    } else {
+    } catch (error) {
+      console.log("🚀 ~ router.post ~ error:", error);
       res.status(400).json({
         status,
-        message: "This variant is already exits",
+        message: "Server error",
       });
     }
-  } catch (error) {
-    console.log("🚀 ~ router.post ~ error:", error);
-    res.status(400).json({
-      status,
-      message: "Server error",
-    });
+    // console.log("🚀 ~ router.post ~ data:", data)
   }
-  // console.log("🚀 ~ router.post ~ data:", data)
-});
+);
 
 // Update Product
 router.post(
@@ -126,8 +133,9 @@ router.post(
     // let status = false;
     const {
       product_title,
-      pack_of,
-      ideal_for,
+      fabric,
+      style,
+      occasion,
       product_desc,
       pc_id,
       product_id,
@@ -142,14 +150,19 @@ router.post(
         updateKeyArr.push(`product_title = ?`);
         updateValueArr.push(product_title);
       }
-      if (pack_of) {
-        updateKeyArr.push(`pack_of = ?`);
-        updateValueArr.push(pack_of);
+      if (fabric) {
+        updateKeyArr.push(`fabric = ?`);
+        updateValueArr.push(fabric);
       }
-      if (pack_of) {
-        updateKeyArr.push(`ideal_for = ?`);
-        updateValueArr.push(ideal_for);
+      if (style) {
+        updateKeyArr.push(`style = ?`);
+        updateValueArr.push(style);
       }
+      if (occasion) {
+        updateKeyArr.push(`occasion = ?`);
+        updateValueArr.push(occasion);
+      }
+
       if (product_desc) {
         updateKeyArr.push(`product_desc = ?`);
         updateValueArr.push(product_desc);
@@ -474,7 +487,7 @@ router.post(
   async (req, res) => {
     try {
       const { query, page, status, category } = req.body;
-      console.log(query)
+      // console.log(query)
       let totalPage;
       let response = {
         status: true,
@@ -483,9 +496,12 @@ router.post(
       const keyArr = [];
       const valueArr = [];
       let sql =
-        "SELECT p.* , pc.category_name , im.image_array FROM tblproduct p";
+        "SELECT p.* , pc.category_name , im.image_array , af.name as fabric_name , ast.name as style_name , ao.name as occasion_name FROM tblproduct p  ";
 
-      sql += ` JOIN tblproductcategory pc ON pc.pc_id = p.pc_id LEFT JOIN tblimages im ON im.product_id = p.product_id LEFT JOIN tblvariant v ON p.product_id = v.product_id`;
+      sql += ` JOIN tblproductcategory pc ON pc.pc_id = p.pc_id LEFT JOIN tblimages im ON im.product_id = p.product_id LEFT JOIN tblvariant v ON p.product_id = v.product_id `;
+      sql += ` LEFT JOIN attributes af ON af.id = p.fabric `;
+      sql += ` LEFT JOIN attributes ast ON ast.id = p.style `;
+      sql += ` LEFT JOIN attributes ao ON ao.id = p.occasion `;
 
       if (category) {
         keyArr.push(" p.pc_id = ? ");
