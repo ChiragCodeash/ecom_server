@@ -8,7 +8,7 @@ const {
   registerValidation,
   loginValidation,
 } = require("../validation/AuthValidation");
-const secretKey = process.env.JSON_SECRET_KEY;
+const secretKey = process.env.JWT_ADMIN_KEY;
 const ValidationError = (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

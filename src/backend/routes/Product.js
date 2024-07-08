@@ -535,7 +535,7 @@ router.post(
       sql += ` GROUP BY p.product_id `;
       const [data] = await db.query(sql, valueArr);
       const offset = (page - 1) * RECORD_PER_PAGE;
-      sql += `  ORDER BY p.created_date DESC  LIMIT ${RECORD_PER_PAGE} OFFSET ${offset}`;
+      sql += `  ORDER BY p.created_date DESC  LIMIT ${RECORD_PER_PAGE} OFFSET ${offset} `;
 
       // console.log(sql)
 

@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 
 const fetchUser = (req, res, next) => {
-  const secretKey = process.env.JSON_SECRET_KEY;
+  const secretKey = process.env.JWT_ADMIN_KEY;
   const { token } = req.headers;
   if (token) {
     jwt.verify(token, secretKey, (err, decoded) => {
