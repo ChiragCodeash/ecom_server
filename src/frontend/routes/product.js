@@ -4,9 +4,11 @@ const db = require("../../db/db");
 const {
   GetFilterValidation,
   GetProductsValidation,
+  GetSingleProduct,
 } = require("../validation/ProductValidation");
 const expressValidationErrorHandler = require("../../middleware/expressValidationErrorHandler");
 const genratePublicUrl = require("../../utils/genratePublicUrl");
+const userAuthentication = require("../../middleware/userAuthentication");
 const router = express.Router();
 
 const CLIENT_RECORD_PER_PAGE = process.env.CLIENT_RECORD_PER_PAGE;
@@ -17,6 +19,7 @@ const PRODUCT_URL = `/images/product`;
 // Get FilterData
 router.post(
   "/getfilter",
+  userAuthentication,
   GetFilterValidation,
   expressValidationErrorHandler,
   asyncHandler(async (req, res) => {
@@ -90,11 +93,21 @@ router.post(
 
 router.post(
   "/getproducts",
+  userAuthentication,
   GetProductsValidation,
   expressValidationErrorHandler,
   asyncHandler(async (req, res) => {
-    const { query, pc_ids, color_ids, size_ids, sorting, price_range, page } =
-      req.body;
+    var {
+      query,
+      pc_ids,
+      color_ids,
+      size_ids,
+      sorting,
+      price_range,
+      page,
+      per_page,
+    } = req.body;
+    per_page = per_page ? +per_page : +CLIENT_RECORD_PER_PAGE;
     const keyArr = [" p.status =  1 ", " v.variant_status = 1 "];
     const valueArr = [];
     let response = {
@@ -103,7 +116,7 @@ router.post(
     };
 
     let sql =
-      "SELECT p.product_id , p.product_title  , pc.category_name,  v.sale_price , v.price , img.image_array , COUNT(v.product_id) as total_variant   FROM tblproduct p";
+      "SELECT p.product_id , p.product_title  , pc.category_name,  v.sale_price , v.price , img.image_array , COUNT(v.product_id) as total_variant , v.variant_id  FROM tblproduct p";
 
     sql += ` JOIN tblproductcategory pc ON pc.pc_id = p.pc_id `;
     sql += ` JOIN tblvariant v ON v.product_id = p.product_id `;
@@ -131,7 +144,7 @@ router.post(
       );
     }
 
-    if (price_range) {
+    if (price_range.length) {
       keyArr.push(
         ` v.sale_price BETWEEN ${price_range[0]} AND ${price_range[1]} `
       );
@@ -173,29 +186,111 @@ router.post(
     // console.log("Query-->" , sql)
     // console.log(sql)
     const [data] = await db.query(sql, valueArr);
-    const offset = (page - 1) * CLIENT_RECORD_PER_PAGE;
-    sql += `  LIMIT ${CLIENT_RECORD_PER_PAGE} OFFSET ${offset} `;
-    var totalPage = Math.ceil(data.length / CLIENT_RECORD_PER_PAGE);
+    const offset = (page - 1) * per_page;
+    sql += `  LIMIT ${per_page} OFFSET ${offset} `;
+    var totalPage = Math.ceil(data.length / per_page);
 
     let [rows, fields] = await db.execute(sql, valueArr);
+    // rows = rows.map((item, i) => {
+    //   return {
+    //     ...item,
+    //     image_array: genratePublicUrl(
+    //       PRODUCT_URL,
+    //       item.image_array
+    //         ? JSON.parse(item.image_array)[0]
+    //         : "default_product.png"
+    //     ),
+    //   };
+    // });
     rows = rows.map((item, i) => {
       return {
         ...item,
-        image_array: genratePublicUrl(
-          PRODUCT_URL,
-          item.image_array
-            ? JSON.parse(item.image_array)[0]
-            : "default_product.png"
-        ),
+        image_array: JSON.parse(item.image_array).map((item, i) => {
+          return genratePublicUrl(PRODUCT_URL, item);
+        }),
       };
     });
     res.status(200).json({
       ...response,
       result: {
         data: rows,
-        perPage: +CLIENT_RECORD_PER_PAGE,
+        perPage: +per_page,
         totalPage,
       },
+    });
+  })
+);
+
+router.get(
+  "/:variant_id",
+  userAuthentication,
+  GetSingleProduct,
+  expressValidationErrorHandler,
+  asyncHandler(async (req, res) => {
+    // TODO: Variant status and product status is Pending.............
+    const uid = req?.user?.id;
+    const { variant_id } = req.params;
+    // "SELECT p.* , v.* FROM tblvariant v JOIN tblproduct p ON v.product_id = p.product_id  WHERE v.variant_id = ? ";
+    var product_sql =
+      "SELECT p.* , v.* ,  af.name as fabric_name , ast.name as style_name , ao.name as occasion_name , im.image_array , pc.category_name  FROM tblvariant v";
+    product_sql += " JOIN tblproduct p ON v.product_id = p.product_id  ";
+    product_sql += " LEFT JOIN tblimages im ON im.image_id = v.image_id  ";
+    product_sql += " JOIN tblcolor c ON v.color_id = c.color_id  ";
+    product_sql += " JOIN tblproductcategory pc ON p.pc_id = pc.pc_id  ";
+    product_sql += " JOIN tblsize s ON v.size_id = s.size_id  ";
+    product_sql += ` LEFT JOIN attributes af ON af.id = p.fabric `;
+    product_sql += ` LEFT JOIN attributes ast ON ast.id = p.style `;
+    product_sql += ` LEFT JOIN attributes ao ON ao.id = p.occasion `;
+    product_sql += "  WHERE v.variant_id = ? AND v.variant_status= 1  ";
+    // console.log(product_sql)
+    var [product_details] = await db.query(product_sql, [variant_id]);
+    // console.log(product_details)
+    product_details[0].image_array = product_details[0].image_array
+      ? JSON.parse(product_details[0].image_array)
+      : ["default_product.png"];
+    // console.log(product_details[0].image_array);
+    product_details[0].image_array = product_details[0].image_array.map(
+      (item, i) => {
+        return genratePublicUrl(PRODUCT_URL, item);
+      }
+    );
+    var color_sql =
+      "SELECT v.variant_id  , v.size_id ,  s.size_name , v.stock  FROM tblvariant v  ";
+    color_sql += " JOIN tblcolor c ON v.color_id = c.color_id  ";
+    color_sql += " JOIN tblsize s ON v.size_id = s.size_id  ";
+    color_sql +=
+      "  WHERE v.product_id = ?  AND  v.color_id = ? AND v.variant_status= 1   ORDER BY s.created_date DESC";
+
+    var size_sql =
+      "SELECT v.variant_id , v.color_id , c.color_name , v.stock  FROM tblvariant v  ";
+    size_sql += " JOIN tblcolor c ON v.color_id = c.color_id  ";
+    size_sql += " JOIN tblsize s ON v.size_id = s.size_id  ";
+    size_sql +=
+      "  WHERE v.product_id = ?  AND  v.size_id = ? AND v.variant_status= 1  ORDER BY c.created_date DESC";
+
+    // console.log(color_sql);
+    const [color_details] = await db.query(color_sql, [
+      product_details[0].product_id,
+      product_details[0].color_id,
+    ]);
+
+    const [size_details] = await db.query(size_sql, [
+      product_details[0].product_id,
+      product_details[0].size_id,
+    ]);
+
+    const data = {
+      ...product_details[0],
+      color_variant: size_details,
+      size_variant: color_details,
+    };
+    // const data = { ...product_details[0] };
+    // console.log(sql);
+    res.status(200).json({
+      message: "Success",
+      status: true,
+      data,
+      // variant_details,
     });
   })
 );

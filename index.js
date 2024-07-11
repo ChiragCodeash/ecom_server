@@ -53,6 +53,7 @@ app.use("/api/theme" ,  require("./src/frontend/routes/theme"),errorHandler);
 app.use("/api/auth", require("./src/frontend/routes/authentication") , errorHandler);
 app.use("/api/profile", require("./src/frontend/routes/profile") , errorHandler);
 app.use("/api/product", require("./src/frontend/routes/product") , errorHandler);
+app.use("/api/cart", require("./src/frontend/routes/cart") , errorHandler);
 
 // Backend -------------------------------------------------------------------
 app.use("/auth", require("./src/backend/routes/auth"));
